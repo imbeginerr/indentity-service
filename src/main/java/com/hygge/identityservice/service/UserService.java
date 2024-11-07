@@ -1,10 +1,12 @@
 package com.hygge.identityservice.service;
 
+import com.hygge.identityservice.constant.PredefinedRole;
 import com.hygge.identityservice.dto.request.UserCreationRequest;
 import com.hygge.identityservice.dto.request.UserUpdateRequest;
 import com.hygge.identityservice.dto.response.UserResponse;
+import com.hygge.identityservice.entity.Role;
 import com.hygge.identityservice.entity.User;
-import com.hygge.identityservice.enums.Role;
+
 import com.hygge.identityservice.exception.AppException;
 import com.hygge.identityservice.exception.ErrorCode;
 import com.hygge.identityservice.mapper.UserMapper;
@@ -14,6 +16,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.prepost.PostAuthorize;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,19 +37,21 @@ public class UserService {
     PasswordEncoder passwordEncoder;
 
     public UserResponse createUser(UserCreationRequest request){
-        log.info("Service: create User");
-        if (userRepository.existsByUsername(request.getUsername()))
-            throw new AppException(ErrorCode.USER_EXISTED);
-
         User user = userMapper.toUser(request);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
 
-        HashSet<String> roles = new HashSet<>();
-        roles.add(Role.USER.name());
+        HashSet<Role> roles = new HashSet<>();
+        roleRepository.findById(PredefinedRole.USER_ROLE).ifPresent(roles::add);
 
-        // user.setRoles(roles);
+        user.setRoles(roles);
 
-        return userMapper.toUserResponse(userRepository.save(user));
+        try {
+            user = userRepository.save(user);
+        } catch (DataIntegrityViolationException exception) {
+            throw new AppException(ErrorCode.USER_EXISTED);
+        }
+
+        return userMapper.toUserResponse(user);
     }
 
     public UserResponse getMyInfo(){
